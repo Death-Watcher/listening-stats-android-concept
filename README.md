@@ -6,8 +6,10 @@ A personal Android app that visualizes music listening statistics from **Last.fm
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84)
 ![GitHub Downloads](https://img.shields.io/github/downloads/Death-Watcher/listening-stats-android-concept/total)
 
-<img src="docs/screenshot1.png" alt="Listening Stats Dashboard" width="300" />
-<img src="docs/screenshot2.png" alt="Listening Stats Activity" width="300" />
+<div align="center">
+  <img src="docs/screenshot1.png" alt="Listening Stats Dashboard" width="300" />
+  <img src="docs/screenshot2.png" alt="Listening Stats Activity" width="300" />
+</div>
 
 ## Features
 
