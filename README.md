@@ -10,6 +10,12 @@ A personal Android app that visualizes music listening statistics from **Last.fm
 - **Activity**: GitHub-style heatmap, hourly/weekly/monthly breakdowns
 - **Album Art**: Deezer API fallback when Last.fm has no cover
 
+## Screenshots
+
+| Dashboard | Activity |
+|---|---|
+| ![Dashboard](docs/screenshot1.png) | ![Activity](docs/screenshot2.png) |
+
 ## Concept
 
 This is a **learning / portfolio project**, not a production app. The goal was to explore:
