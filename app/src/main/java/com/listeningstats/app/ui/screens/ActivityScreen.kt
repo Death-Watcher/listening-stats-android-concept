@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,20 +42,25 @@ fun ActivityScreen(
             )
         },
     ) { padding ->
-        if (state.loading) {
+        val hasData = state.activity.hourly.isNotEmpty()
+        if (state.loading && !hasData) {
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
-        } else if (state.error != null) {
+        } else if (state.error != null && !hasData) {
             ErrorView(message = state.error!!, onRetry = { viewModel.load() })
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+            PullToRefreshBox(
+                isRefreshing = state.loading,
+                onRefresh = { viewModel.load() },
+                modifier = Modifier.fillMaxSize().padding(padding),
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                ) {
                 Text(
                     text = "Activity",
                     style = MaterialTheme.typography.headlineMedium,
@@ -77,6 +83,25 @@ fun ActivityScreen(
                         Text("Listening Heatmap", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(8.dp))
                         CalendarHeatmap(heatmapData = state.heatmap)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Listening Streaks
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                ) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("${state.currentStreak}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text("Day Streak", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("${state.longestStreak}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text("Longest Streak", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
 
@@ -124,6 +149,7 @@ fun ActivityScreen(
                 }
 
                 Spacer(modifier = Modifier.height(80.dp))
+                }
             }
         }
     }

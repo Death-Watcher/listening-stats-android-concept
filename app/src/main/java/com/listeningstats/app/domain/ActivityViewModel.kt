@@ -18,6 +18,8 @@ data class ActivityState(
     val activity: ActivityData = ActivityData(),
     val heatmap: List<HeatmapEntry> = emptyList(),
     val totalPlayCount: Int = 0,
+    val currentStreak: Int = 0,
+    val longestStreak: Int = 0,
     val loading: Boolean = false,
     val error: String? = null,
 )
@@ -27,6 +29,8 @@ private data class ActivityCache(
     val activity: ActivityData,
     val heatmap: List<HeatmapEntry>,
     val totalPlayCount: Int,
+    val currentStreak: Int = 0,
+    val longestStreak: Int = 0,
 )
 
 class ActivityViewModel(application: Application) : AndroidViewModel(application) {
@@ -127,19 +131,53 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
 
                 val activityData = ActivityData(hourly = hourly, weekly = weekly, monthly = monthly)
 
+                val dateSet = aggregatedHeatmap.filter { it.count > 0 }.map { it.date }.toSet()
+                val today = java.time.LocalDate.now()
+                val fmt = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
+
+                val currentStreak = run {
+                    var streak = 0
+                    var d = today
+                    if (dateSet.contains(d.format(fmt))) {
+                        streak = 1; d = d.minusDays(1)
+                    } else {
+                        d = d.minusDays(1)
+                        if (dateSet.contains(d.format(fmt))) {
+                            streak = 1; d = d.minusDays(1)
+                        }
+                    }
+                    while (dateSet.contains(d.format(fmt))) { streak++; d = d.minusDays(1) }
+                    streak
+                }
+
+                val longestStreak = run {
+                    val sorted = dateSet.sorted()
+                    if (sorted.isEmpty()) 0
+                    else {
+                        var maxRun = 1; var run = 1
+                        for (i in 1 until sorted.size) {
+                            val prev = java.time.LocalDate.parse(sorted[i - 1])
+                            val curr = java.time.LocalDate.parse(sorted[i])
+                            if (java.time.temporal.ChronoUnit.DAYS.between(prev, curr) == 1L) { run++ }
+                            else { maxRun = maxOf(maxRun, run); run = 1 }
+                        }
+                        maxOf(maxRun, run)
+                    }
+                }
+
                 try {
-                    cacheManager.set("activity_v2", json.encodeToString(ActivityCache(activityData, aggregatedHeatmap, allRecent.size)))
+                    cacheManager.set("activity_v2", json.encodeToString(ActivityCache(activityData, aggregatedHeatmap, allRecent.size, currentStreak, longestStreak)))
                 } catch (_: Exception) {}
 
                 _state.update {
-                    it.copy(activity = activityData, heatmap = aggregatedHeatmap, totalPlayCount = allRecent.size, loading = false)
+                    it.copy(activity = activityData, heatmap = aggregatedHeatmap, totalPlayCount = allRecent.size, currentStreak = currentStreak, longestStreak = longestStreak, loading = false)
                 }
             } catch (e: Exception) {
                 val cached = cacheManager.get("activity_v2")
                 if (cached != null) {
                     try {
                         val c = json.decodeFromString<ActivityCache>(cached)
-                        _state.update { it.copy(activity = c.activity, heatmap = c.heatmap, totalPlayCount = c.totalPlayCount, loading = false) }
+                        _state.update { it.copy(activity = c.activity, heatmap = c.heatmap, totalPlayCount = c.totalPlayCount, currentStreak = c.currentStreak, longestStreak = c.longestStreak, loading = false) }
                     } catch (_: Exception) {
                         _state.update { it.copy(loading = false, error = e.message) }
                     }

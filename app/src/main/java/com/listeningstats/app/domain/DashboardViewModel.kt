@@ -20,6 +20,7 @@ data class DashboardState(
     val topTracks: List<Track> = emptyList(),
     val topArtists: List<Artist> = emptyList(),
     val topAlbums: List<Album> = emptyList(),
+    val selectedRange: TimeRange = TimeRange.OVERALL,
     val loading: Boolean = false,
     val error: String? = null,
 )
@@ -31,6 +32,7 @@ private data class DashboardCache(
     val topTracks: List<Track>,
     val topArtists: List<Artist>,
     val topAlbums: List<Album>,
+    val range: String = "OVERALL",
 )
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
@@ -53,26 +55,17 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             val key = settingsManager.lastFmApiKey.first()
             lastFmUser = user
             lastFmApiKey = key
-            loadCache()
-            refresh()
         }
         viewModelScope.launch { settingsManager.lastFmUser.collect { lastFmUser = it } }
         viewModelScope.launch { settingsManager.lastFmApiKey.collect { lastFmApiKey = it } }
     }
 
-    private fun loadCache() {
-        val cached = cacheManager.get("dashboard_v2") ?: return
-        try {
-            val cache = json.decodeFromString<DashboardCache>(cached)
-            _state.update {
-                it.copy(
-                    stats = cache.stats, recentTracks = cache.recentTracks,
-                    topTracks = cache.topTracks, topArtists = cache.topArtists,
-                    topAlbums = cache.topAlbums, loading = true,
-                )
-            }
-        } catch (_: Exception) {}
+    fun setTimeRange(range: TimeRange) {
+        _state.update { it.copy(selectedRange = range) }
+        refresh()
     }
+
+    private fun cacheKey(range: TimeRange): String = "dashboard_${range.name}"
 
     private suspend fun searchAlbumArt(artist: String, song: String): String? {
         return try {
@@ -106,12 +99,26 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
 
+        val range = _state.value.selectedRange
+
+        val cached = cacheManager.get(cacheKey(range))
+        if (cached != null) {
+            try {
+                val c = json.decodeFromString<DashboardCache>(cached)
+                _state.update {
+                    it.copy(stats = c.stats, recentTracks = c.recentTracks,
+                        topTracks = c.topTracks, topArtists = c.topArtists,
+                        topAlbums = c.topAlbums, loading = true)
+                }
+            } catch (_: Exception) {}
+        }
+
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
 
-            val trackResult = repository.getTopTracks(Provider.LAST_FM, user, key, "", TimeRange.OVERALL, 10)
-            val artistResult = repository.getTopArtists(Provider.LAST_FM, user, key, "", TimeRange.OVERALL, 10)
-            val albumResult = repository.getTopAlbums(Provider.LAST_FM, user, key, "", TimeRange.OVERALL, 10)
+            val trackResult = repository.getTopTracks(Provider.LAST_FM, user, key, "", range, 10)
+            val artistResult = repository.getTopArtists(Provider.LAST_FM, user, key, "", range, 10)
+            val albumResult = repository.getTopAlbums(Provider.LAST_FM, user, key, "", range, 10)
             val recentResult = repository.getRecentTracks(Provider.LAST_FM, user, key, "", 10)
 
             val lastFmTracks = trackResult.getOrDefault(emptyList())
@@ -162,8 +169,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 topAlbum = albumsWithArt.firstOrNull(),
             )
 
-            val cache = DashboardCache(summary, recentWithArt, tracksWithArt, artistsWithArt, albumsWithArt)
-            try { cacheManager.set("dashboard_v2", json.encodeToString(cache)) } catch (_: Exception) {}
+            val cache = DashboardCache(summary, recentWithArt, tracksWithArt, artistsWithArt, albumsWithArt, range.name)
+            try { cacheManager.set(cacheKey(range), json.encodeToString(cache)) } catch (_: Exception) {}
 
             _state.update {
                 it.copy(stats = summary, recentTracks = recentWithArt,

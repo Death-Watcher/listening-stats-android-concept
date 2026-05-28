@@ -6,7 +6,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,6 +42,7 @@ fun TopItemsScreen(
                             ItemType.TRACKS -> "Top Tracks"
                             ItemType.ARTISTS -> "Top Artists"
                             ItemType.ALBUMS -> "Top Albums"
+                            ItemType.GENRES -> "Top Genres"
                         }
                     )
                 },
@@ -98,26 +101,34 @@ fun TopItemsScreen(
                                 ItemType.TRACKS -> "Tracks"
                                 ItemType.ARTISTS -> "Artists"
                                 ItemType.ALBUMS -> "Albums"
+                                ItemType.GENRES -> "Genres"
                             }
                         )
                     }
                 }
             }
 
+            val hasData = state.items.isNotEmpty()
             when {
-                state.loading -> LoadingIndicator()
-                state.error != null -> ErrorView(message = state.error!!) { viewModel.load(selectedType, selectedRange) }
+                state.loading && !hasData -> LoadingIndicator()
+                state.error != null && !hasData -> ErrorView(message = state.error!!) { viewModel.load(selectedType, selectedRange) }
                 else -> {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        itemsIndexed(state.items) { index, item ->
-                            when (item) {
-                                is Track -> TrackListItem(track = item, rank = index + 1)
-                                is Artist -> ArtistListItem(artist = item, rank = index + 1)
-                                is Album -> AlbumListItem(album = item, rank = index + 1)
-                                is Genre -> GenreListItem(genre = item, rank = index + 1)
-                            }
-                            if (index < state.items.size - 1) {
-                                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                    PullToRefreshBox(
+                        isRefreshing = state.loading,
+                        onRefresh = { viewModel.load(selectedType, selectedRange) },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            itemsIndexed(state.items) { index, item ->
+                                when (item) {
+                                    is Track -> TrackListItem(track = item, rank = index + 1)
+                                    is Artist -> ArtistListItem(artist = item, rank = index + 1)
+                                    is Album -> AlbumListItem(album = item, rank = index + 1)
+                                    is Genre -> GenreListItem(genre = item, rank = index + 1)
+                                }
+                                if (index < state.items.size - 1) {
+                                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                                }
                             }
                         }
                     }

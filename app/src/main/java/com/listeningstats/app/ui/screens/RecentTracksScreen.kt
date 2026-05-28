@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,18 +42,25 @@ fun RecentTracksScreen(
             )
         },
     ) { padding ->
+        val hasData = state.tracks.isNotEmpty()
         when {
-            state.loading -> LoadingIndicator()
-            state.error != null -> ErrorView(message = state.error!!, onRetry = { viewModel.load() })
+            state.loading && !hasData -> LoadingIndicator()
+            state.error != null && !hasData -> ErrorView(message = state.error!!, onRetry = { viewModel.load() })
             else -> {
-                LazyColumn(
+                PullToRefreshBox(
+                    isRefreshing = state.loading,
+                    onRefresh = { viewModel.load() },
                     modifier = Modifier.fillMaxSize().padding(padding),
-                    contentPadding = PaddingValues(vertical = 8.dp),
                 ) {
-                    itemsIndexed(state.tracks) { index, track ->
-                        RecentTrackItem(track = track)
-                        if (index < state.tracks.size - 1) {
-                            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 8.dp),
+                    ) {
+                        itemsIndexed(state.tracks) { index, track ->
+                            RecentTrackItem(track = track)
+                            if (index < state.tracks.size - 1) {
+                                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                            }
                         }
                     }
                 }

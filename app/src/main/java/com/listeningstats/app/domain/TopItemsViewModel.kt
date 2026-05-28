@@ -22,7 +22,7 @@ data class TopItemsState(
     val error: String? = null,
 )
 
-enum class ItemType { TRACKS, ARTISTS, ALBUMS }
+enum class ItemType { TRACKS, ARTISTS, ALBUMS, GENRES }
 
 private val json = Json { ignoreUnknownKeys = true }
 
@@ -34,6 +34,9 @@ private data class ArtistsCache(val items: List<Artist>)
 
 @Serializable
 private data class AlbumsCache(val items: List<Album>)
+
+@Serializable
+private data class GenresCache(val items: List<Genre>)
 
 class TopItemsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -62,15 +65,16 @@ class TopItemsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun load(type: ItemType = _state.value.selectedType, range: TimeRange = _state.value.selectedRange) {
-        val cacheKey = "top_${type.name}_${range.name}"
+        val cKey = "top_${type.name}_${range.name}"
 
-        val cached = cacheManager.get(cacheKey)
+        val cached = cacheManager.get(cKey)
         if (cached != null) {
             try {
                 val items = when (type) {
                     ItemType.TRACKS -> json.decodeFromString<TracksCache>(cached).items
                     ItemType.ARTISTS -> json.decodeFromString<ArtistsCache>(cached).items
                     ItemType.ALBUMS -> json.decodeFromString<AlbumsCache>(cached).items
+                    ItemType.GENRES -> json.decodeFromString<GenresCache>(cached).items
                 }
                 _state.update { it.copy(items = items, selectedType = type, selectedRange = range, error = null) }
             } catch (_: Exception) {}
@@ -95,7 +99,7 @@ class TopItemsViewModel(application: Application) : AndroidViewModel(application
                             }.mapNotNull { if (it is Track) it else (it as Deferred<Any>).await() as? Track } +
                             raw.drop(10)
                         }
-                        try { cacheManager.set(cacheKey, json.encodeToString(TracksCache(withArt))) } catch (_: Exception) {}
+                        try { cacheManager.set(cKey, json.encodeToString(TracksCache(withArt))) } catch (_: Exception) {}
                         withArt
                     }
                     ItemType.ARTISTS -> {
@@ -107,7 +111,7 @@ class TopItemsViewModel(application: Application) : AndroidViewModel(application
                             }.mapNotNull { if (it is Artist) it else (it as Deferred<Any>).await() as? Artist } +
                             raw.drop(10)
                         }
-                        try { cacheManager.set(cacheKey, json.encodeToString(ArtistsCache(withArt))) } catch (_: Exception) {}
+                        try { cacheManager.set(cKey, json.encodeToString(ArtistsCache(withArt))) } catch (_: Exception) {}
                         withArt
                     }
                     ItemType.ALBUMS -> {
@@ -119,8 +123,13 @@ class TopItemsViewModel(application: Application) : AndroidViewModel(application
                             }.mapNotNull { if (it is Album) it else (it as Deferred<Any>).await() as? Album } +
                             raw.drop(10)
                         }
-                        try { cacheManager.set(cacheKey, json.encodeToString(AlbumsCache(withArt))) } catch (_: Exception) {}
+                        try { cacheManager.set(cKey, json.encodeToString(AlbumsCache(withArt))) } catch (_: Exception) {}
                         withArt
+                    }
+                    ItemType.GENRES -> {
+                        val raw = repository.getGenres(key, user, range, 30).getOrDefault(emptyList())
+                        try { cacheManager.set(cKey, json.encodeToString(GenresCache(raw))) } catch (_: Exception) {}
+                        raw
                     }
                 }
                 _state.update { it.copy(items = items, loading = false) }

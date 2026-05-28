@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +26,7 @@ import coil.compose.AsyncImage
 import com.listeningstats.app.data.model.*
 import com.listeningstats.app.domain.DashboardViewModel
 import com.listeningstats.app.ui.components.*
+import com.listeningstats.app.data.model.TimeRange
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +38,8 @@ fun DashboardScreen(
     onSeeAllRecent: () -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
+    var showRangeMenu by remember { mutableStateOf(false) }
+    val hasData = state.stats.topTrack != null
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
@@ -43,6 +47,42 @@ fun DashboardScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Listening Stats", fontWeight = FontWeight.Bold) },
+                actions = {
+                    Box {
+                        TextButton(onClick = { showRangeMenu = true }) {
+                            Text(
+                                when (state.selectedRange) {
+                                    TimeRange.WEEK -> "Week"
+                                    TimeRange.MONTH -> "Month"
+                                    TimeRange.THREE_MONTHS -> "3 Months"
+                                    TimeRange.SIX_MONTHS -> "6 Months"
+                                    TimeRange.YEAR -> "Year"
+                                    TimeRange.OVERALL -> "Overall"
+                                }
+                            )
+                        }
+                        DropdownMenu(expanded = showRangeMenu, onDismissRequest = { showRangeMenu = false }) {
+                            TimeRange.entries.forEach { range ->
+                                DropdownMenuItem(
+                                    text = { Text(
+                                        when (range) {
+                                            TimeRange.WEEK -> "Week"
+                                            TimeRange.MONTH -> "Month"
+                                            TimeRange.THREE_MONTHS -> "3 Months"
+                                            TimeRange.SIX_MONTHS -> "6 Months"
+                                            TimeRange.YEAR -> "Year"
+                                            TimeRange.OVERALL -> "Overall"
+                                        }
+                                    )},
+                                    onClick = {
+                                        showRangeMenu = false
+                                        viewModel.setTimeRange(range)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
@@ -50,11 +90,11 @@ fun DashboardScreen(
             )
         },
     ) { padding ->
-        if (state.loading && state.stats.topTrack == null) {
+        if (state.loading && !hasData) {
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
-        } else if (state.error != null && state.stats.topTrack == null) {
+        } else if (state.error != null && !hasData) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -67,87 +107,91 @@ fun DashboardScreen(
                 Button(onClick = { viewModel.refresh() }) { Text("Retry") }
             }
         } else {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
+            PullToRefreshBox(
+                isRefreshing = state.loading,
+                onRefresh = { viewModel.refresh() },
+                modifier = Modifier.fillMaxSize().padding(padding),
             ) {
-                // Summary Cards Row
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    SummaryCard(
-                        title = "Tracks",
-                        value = if (state.topTracks.isNotEmpty()) { val s = state.topTracks.sumOf { it.playCount }; if (s > 0) "$s" else "-" } else "-",
-                        subtitle = state.stats.topTrack?.name ?: "No data",
-                        modifier = Modifier.weight(1f),
-                    )
-                    SummaryCard(
-                        title = "Artists",
-                        value = if (state.topArtists.isNotEmpty()) { val s = state.topArtists.sumOf { it.playCount }; if (s > 0) "$s" else "-" } else "-",
-                        subtitle = state.stats.topArtist?.name ?: "No data",
-                        modifier = Modifier.weight(1f),
-                    )
-                    SummaryCard(
-                        title = "Albums",
-                        value = if (state.topAlbums.isNotEmpty()) { val s = state.topAlbums.sumOf { it.playCount }; if (s > 0) "$s" else "-" } else "-",
-                        subtitle = state.stats.topAlbum?.name ?: "No data",
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-
-                // Provider indicator
-                val hasLf = state.topTracks.isNotEmpty() || state.stats.topTrack != null
-                val hasSf = state.recentTracks.any { it.artist == "stats.fm" }
-                if (hasLf || hasSf) {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    // Summary Cards Row
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        val label = buildString {
-                            if (hasLf) append("Last.fm")
-                            if (hasLf && hasSf) append(" + ")
-                            if (hasSf) append("stats.fm")
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                        SummaryCard(
+                            title = "Tracks",
+                            value = if (state.topTracks.isNotEmpty()) { val s = state.topTracks.sumOf { it.playCount }; if (s > 0) "$s" else "-" } else "-",
+                            subtitle = state.stats.topTrack?.name ?: "No data",
+                            modifier = Modifier.weight(1f),
+                        )
+                        SummaryCard(
+                            title = "Artists",
+                            value = if (state.topArtists.isNotEmpty()) { val s = state.topArtists.sumOf { it.playCount }; if (s > 0) "$s" else "-" } else "-",
+                            subtitle = state.stats.topArtist?.name ?: "No data",
+                            modifier = Modifier.weight(1f),
+                        )
+                        SummaryCard(
+                            title = "Albums",
+                            value = if (state.topAlbums.isNotEmpty()) { val s = state.topAlbums.sumOf { it.playCount }; if (s > 0) "$s" else "-" } else "-",
+                            subtitle = state.stats.topAlbum?.name ?: "No data",
+                            modifier = Modifier.weight(1f),
                         )
                     }
+
+                    // Provider indicator
+                    val hasLf = state.topTracks.isNotEmpty() || state.stats.topTrack != null
+                    val hasSf = state.recentTracks.any { it.artist == "stats.fm" }
+                    if (hasLf || hasSf) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val label = buildString {
+                                if (hasLf) append("Last.fm")
+                                if (hasLf && hasSf) append(" + ")
+                                if (hasSf) append("stats.fm")
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+
+                    // Top Tracks Section
+                    SectionHeader(title = "Top Tracks", onSeeAll = onSeeAllTracks)
+                    state.topTracks.take(5).forEachIndexed { i, track ->
+                        TrackRow(track = track, rank = i + 1)
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                    // Top Artists Section
+                    SectionHeader(title = "Top Artists", onSeeAll = onSeeAllArtists)
+                    state.topArtists.take(5).forEachIndexed { i, artist ->
+                        ArtistRow(artist = artist, rank = i + 1)
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                    // Top Albums Section
+                    SectionHeader(title = "Top Albums", onSeeAll = onSeeAllAlbums)
+                    state.topAlbums.take(3).forEachIndexed { i, album ->
+                        AlbumRow(album = album, rank = i + 1)
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                    // Recently Played Section
+                    SectionHeader(title = "Recently Played", onSeeAll = onSeeAllRecent)
+                    state.recentTracks.take(3).forEachIndexed { i, track ->
+                        RecentRow(track = track)
+                    }
+
+                    Spacer(modifier = Modifier.height(80.dp))
                 }
-
-                // Top Tracks Section
-                SectionHeader(title = "Top Tracks", onSeeAll = onSeeAllTracks)
-                state.topTracks.take(5).forEachIndexed { i, track ->
-                    TrackRow(track = track, rank = i + 1)
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
-                // Top Artists Section
-                SectionHeader(title = "Top Artists", onSeeAll = onSeeAllArtists)
-                state.topArtists.take(5).forEachIndexed { i, artist ->
-                    ArtistRow(artist = artist, rank = i + 1)
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
-                // Top Albums Section
-                SectionHeader(title = "Top Albums", onSeeAll = onSeeAllAlbums)
-                state.topAlbums.take(3).forEachIndexed { i, album ->
-                    AlbumRow(album = album, rank = i + 1)
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
-                // Recently Played Section
-                SectionHeader(title = "Recently Played", onSeeAll = onSeeAllRecent)
-                state.recentTracks.take(3).forEachIndexed { i, track ->
-                    RecentRow(track = track)
-                }
-
-                Spacer(modifier = Modifier.height(80.dp))
             }
         }
     }
